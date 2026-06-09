@@ -30,6 +30,8 @@
 const int PIXEL_COUNT = 215;
 const int SUBPIXEL_SCALE = 16;
 const float MAX_PIX_PER_SEC = 20.0f;
+const int START_DEADBAND_PIXELS = 20;
+const int END_DEADBAND_PIXELS = 20;
 
 const String BITBUCKET_URL = "TBD";
 
@@ -57,8 +59,10 @@ Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const int MAX_SUBPIX = (PIXEL_COUNT - 1) * SUBPIXEL_SCALE;
+const int ACTIVE_MIN_SUBPIX = START_DEADBAND_PIXELS * SUBPIXEL_SCALE;
+const int ACTIVE_MAX_SUBPIX = ((PIXEL_COUNT - 1) - END_DEADBAND_PIXELS) * SUBPIXEL_SCALE;
 
-int currentSubpix = 0;
+int currentSubpix = ACTIVE_MIN_SUBPIX;
 long lastEncPos = 0;
 bool isNight = false;
 bool nightRendered = false;
@@ -76,13 +80,13 @@ void updateNightState()
 void printCurrentTime()
 {
     Serial.print(F("Boot time: "));
-    Serial.print(Controllino_GetDay());
+    Serial.print((int)Controllino_GetDay());
     Serial.print(F("/"));
-    Serial.print(Controllino_GetMonth());
+    Serial.print((int)Controllino_GetMonth());
     Serial.print(F("/20"));
-    Serial.print(Controllino_GetYear());
+    Serial.print((int)Controllino_GetYear());
     Serial.print(F("  "));
-    Serial.print(Controllino_GetHour());
+    Serial.print((int)Controllino_GetHour());
     Serial.print(F(":"));
     int m = Controllino_GetMinute();
     if (m < 10)
@@ -165,11 +169,11 @@ void bootDotAnimation()
         if (t >= DUR)
             break;
         int sp = (t < DUR / 2)
-                     ? map((long)t, 0, DUR / 2, 0, MAX_SUBPIX)
-                     : map((long)t, DUR / 2, DUR, MAX_SUBPIX, 0);
+                     ? map((long)t, 0, DUR / 2, ACTIVE_MIN_SUBPIX, ACTIVE_MAX_SUBPIX)
+                     : map((long)t, DUR / 2, DUR, ACTIVE_MAX_SUBPIX, ACTIVE_MIN_SUBPIX);
         showBlue(sp);
     }
-    showBlue(0);
+    showBlue(ACTIVE_MIN_SUBPIX);
 }
 
 // ── Setup & Loop ──────────────────────────────────────────────────────────────
@@ -177,9 +181,11 @@ void printSketchNameAndCompileDate()
 {
     String the_path = __FILE__;
     int slash_loc = the_path.lastIndexOf('/');
-    String the_cpp_name = the_path.substring(slash_loc + 1);
+    int backslash_loc = the_path.lastIndexOf('\\');
+    int sep_loc = (slash_loc > backslash_loc) ? slash_loc : backslash_loc;
+    String the_cpp_name = the_path.substring(sep_loc + 1);
     int dot_loc = the_cpp_name.lastIndexOf('.');
-    String the_sketchname = the_cpp_name.substring(0, dot_loc);
+    String the_sketchname = (dot_loc > 0) ? the_cpp_name.substring(0, dot_loc) : the_cpp_name;
 
     Serial.print("\nArduino is running Sketch: ");
     Serial.println(the_sketchname);
@@ -264,7 +270,11 @@ void loop()
         lastEncPos = clamped;
     }
 
-    int targetSubpix = (int)clamped * SUBPIX_PER_COUNT;
+    int targetSubpix = map((int)clamped,
+                           0,
+                           PIXEL_COUNT - 1,
+                           ACTIVE_MIN_SUBPIX,
+                           ACTIVE_MAX_SUBPIX);
 
     // Slew
     unsigned long elapsed = now - prevFrameMs;
