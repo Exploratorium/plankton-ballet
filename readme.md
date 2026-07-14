@@ -1,5 +1,14 @@
 # Plankton Ballet 🦐💙✨
 
+## Todos:
+- [ ] Update knob interaction (reverse direction, use current direction turning rather than delta) 
+- [ ] Package libraries together (migrate to local reference)
+
+-> END TIME: next thursday, HMG QC 
+
+Delayed until after decisions/QC done
+- [ ] On-board RTC for daytime/night time modes  -> LATER
+
 Welcome to the  AI-made exhibit controller in the tank. 🤖⚡
 
 This project powers an interactive museum experience where visitors steer a blue light with a dial and watch brine shrimp swarm toward it in real time. It is proudly AI-based and  **not yet quality-controlled at all**. 
