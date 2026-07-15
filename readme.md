@@ -1,13 +1,13 @@
 # Plankton Ballet 🦐💙✨
 
 ## Todos:
-- [ ] Update knob interaction (reverse direction, use current direction turning rather than delta) 
+- [ ] Update knob interaction (reverse direction [done], use current direction turning rather than delta) 
 - [ ] Package libraries together (migrate to local reference)
 
 -> END TIME: next thursday, HMG QC 
 
 Delayed until after decisions/QC done
-- [ ] On-board RTC for daytime/night time modes  -> LATER
+- [ ] On-board RTC for daytime/night time modes
 
 Welcome to the  AI-made exhibit controller in the tank. 🤖⚡
 

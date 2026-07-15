@@ -22,8 +22,6 @@ const float MAX_PIX_PER_SEC = 20.0f;
 const int START_DEADBAND_PIXELS = 20;
 const int END_DEADBAND_PIXELS = 20;
 
-const String BITBUCKET_URL = "TBD";
-
 // Sub-pixels moved per quadrature count. 16 = 1 pixel per count.
 // If the dot moves too fast, increase this value; too slow, decrease it.
 // A 128-step/rev encoder in full quadrature gives 512 counts/rev.
@@ -49,6 +47,7 @@ const int ACTIVE_MAX_SUBPIX = ((PIXEL_COUNT - 1) - END_DEADBAND_PIXELS) * SUBPIX
 int currentSubpix = ACTIVE_MIN_SUBPIX;
 long lastEncPos = 0;
 unsigned long prevFrameMs = 0;
+int targetSubpix = ACTIVE_MIN_SUBPIX;
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
@@ -133,8 +132,6 @@ void printSketchNameAndCompileDate()
     Serial.print(__DATE__);
     Serial.print(" at ");
     Serial.print(__TIME__);
-    Serial.print(" Bitbucket URL with hash: ");
-    Serial.print(BITBUCKET_URL);
     Serial.print("\n");
 }
 
@@ -157,23 +154,37 @@ void loop()
     unsigned long now = millis();
 
     // Encoder
-    long raw = knob.read();
-    long clamped = constrain(raw, 0L, (long)(PIXEL_COUNT - 1));
-    if (clamped != raw)
-        knob.write(clamped);
+    long raw = knob.read(); // Encoder reads 0-214, approximately.
+    // Serial.println(raw);
 
-    if (clamped != lastEncPos)
-    {
-        Serial.print(F("Encoder: "));
-        Serial.println((int)clamped);
-        lastEncPos = clamped;
+    if (raw > lastEncPos) {
+        targetSubpix += 1;
+    } else if (raw < lastEncPos) {
+        targetSubpix -= 1;
+    } else {
+        return;
     }
 
-    int targetSubpix = map((int)clamped,
-                           0,
-                           PIXEL_COUNT - 1,
-                           ACTIVE_MIN_SUBPIX,
-                           ACTIVE_MAX_SUBPIX);
+    Serial.println("Raw input: " + String(raw) + " | Target subpixel: " + String(targetSubpix));
+
+    lastEncPos = raw;
+    // long clamped = constrain(raw, 0L, (long)(PIXEL_COUNT - 1));
+    // if (clamped != raw)
+    //     knob.write(clamped);
+
+    // if (clamped != lastEncPos)
+    // {
+    //     // Serial.print(F("Encoder: "));
+    //     // Serial.println((int)clamped);
+    //     lastEncPos = clamped;
+    // }
+
+
+    // int targetSubpix = map((int)clamped,
+    //                        0,
+    //                        PIXEL_COUNT - 1,
+    //                        ACTIVE_MIN_SUBPIX,
+    //                        ACTIVE_MAX_SUBPIX);
 
     // Slew
     unsigned long elapsed = now - prevFrameMs;
