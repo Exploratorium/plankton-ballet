@@ -43,6 +43,8 @@ Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 const int MAX_SUBPIX = (PIXEL_COUNT - 1) * SUBPIXEL_SCALE;
 const int ACTIVE_MIN_SUBPIX = START_DEADBAND_PIXELS * SUBPIXEL_SCALE;
 const int ACTIVE_MAX_SUBPIX = ((PIXEL_COUNT - 1) - END_DEADBAND_PIXELS) * SUBPIXEL_SCALE;
+const int MAX_STEP = 5;
+const int MAX_DIFF = 7;
 
 int currentSubpix = ACTIVE_MIN_SUBPIX;
 long lastEncPos = 0;
@@ -157,13 +159,16 @@ void loop()
     long raw = knob.read(); // Encoder reads 0-214, approximately.
     // Serial.println(raw);
 
-    if (raw > lastEncPos) {
-        targetSubpix += 1;
-    } else if (raw < lastEncPos) {
-        targetSubpix -= 1;
-    } else {
-        return;
-    }
+    int step = map(raw - lastEncPos, -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
+    targetSubpix += step;
+
+    // if (raw > lastEncPos) {
+    //     targetSubpix += step;
+    // } else if (raw < lastEncPos) {
+    //     targetSubpix -= 1;
+    // } else {
+    //     return;
+    // }
 
     Serial.println("Raw input: " + String(raw) + " | Target subpixel: " + String(targetSubpix));
 
