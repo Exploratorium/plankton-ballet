@@ -69,19 +69,15 @@ void setPixelBothStrips(int i, uint8_t r, uint8_t g, uint8_t b)
 void showBlue(int sp)
 {
     int px = sp / SUBPIXEL_SCALE;
-    int rem = sp % SUBPIXEL_SCALE;
+    int rem = sp % SUBPIXEL_SCALE; // 0..SUBPIXEL_SCALE-1
 
     for (int i = 0; i < PIXEL_COUNT; i++)
     {
         int bri;
         if (i == px)
-            bri = SUBPIXEL_SCALE - rem / 2;
+            bri = SUBPIXEL_SCALE - rem; // full at rem=0, fades as dot moves right
         else if (i == px + 1)
-            bri = rem / 2;
-        else if (i == px - 1 && rem < 8)
-            bri = (8 - rem) / 2;
-        else if (i == px + 2 && rem > 8)
-            bri = (rem - 8) / 2;
+            bri = rem;                  // zero at rem=0, brightens as dot moves right
         else
         {
             setPixelBothStrips(i, BG_R, BG_G, BG_B);
