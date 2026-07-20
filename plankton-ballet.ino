@@ -4,6 +4,7 @@
  *
  * Encoder:  CONTROLLINO_IN0 (INT0, pin 2), CONTROLLINO_IN1 (INT1, pin 3)
  * NeoPixel: CONTROLLINO_D6 PIN HEADER only – leave screw terminal unwired
+ * Mode:     CONTROLLINO_A1  HIGH = visitor mode, LOW = maintenance mode (all white)
  *
  * Boot sequence:
  *   1. NeoPixel: blue dot sweeps 0→end→0 over 2000 ms
@@ -34,6 +35,7 @@ const uint8_t BG_R = 2, BG_G = 0, BG_B = 0;
 // ── Hardware ─────────────────────────────────────────────────────────────────
 
 #define NEOPIXEL_PIN CONTROLLINO_D6
+#define MODE_PIN     CONTROLLINO_A1  // HIGH = visitor mode, LOW = maintenance mode
 
 Encoder knob(CONTROLLINO_IN0, CONTROLLINO_IN1);
 Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -50,6 +52,7 @@ int currentSubpix = ACTIVE_MIN_SUBPIX;
 long lastEncPos = 0;
 unsigned long prevFrameMs = 0;
 int targetSubpix = ACTIVE_MIN_SUBPIX;
+bool maintenanceRendered = false;
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
@@ -138,6 +141,8 @@ void setup()
     Serial.begin(9600);
     printSketchNameAndCompileDate();
 
+    pinMode(MODE_PIN, INPUT_PULLDOWN);
+
     strip.begin();
     strip.show();
 
@@ -151,31 +156,48 @@ void loop()
 {
     unsigned long now = millis();
 
-    // Encoder
-    long raw = knob.read(); // Encoder reads 0-214, approximately.
-    // Serial.println(raw);
+    bool visitorEngagementMode = (digitalRead(MODE_PIN) == HIGH);
 
-    int step = map(raw - lastEncPos, -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
-    targetSubpix += step;
-    targetSubpix = constrain(targetSubpix, ACTIVE_MIN_SUBPIX, ACTIVE_MAX_SUBPIX);
-
-    Serial.println("Raw input: " + String(raw) + " | Target subpixel: " + String(targetSubpix));
-
-    lastEncPos = raw;
-      // Slew
-    unsigned long elapsed = now - prevFrameMs;
-    if (elapsed > 0)
+    if (visitorEngagementMode)
     {
-        prevFrameMs = now;
-        int maxSteps = (int)((MAX_PIX_PER_SEC * SUBPIXEL_SCALE * (float)elapsed) / 1000.0f);
-        if (maxSteps > 0)
+        maintenanceRendered = false;
+
+        // Encoder
+        long raw = knob.read(); // Encoder reads 0-214, approximately.
+
+        int step = map(raw - lastEncPos, -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
+        targetSubpix += step;
+
+        lastEncPos = raw;
+
+        // Slew
+        unsigned long elapsed = now - prevFrameMs;
+        if (elapsed > 0)
         {
-            int diff = targetSubpix - currentSubpix;
-            if (abs(diff) <= maxSteps)
-                currentSubpix = targetSubpix;
-            else
-                currentSubpix += (diff > 0) ? maxSteps : -maxSteps;
+            prevFrameMs = now;
+            int maxSteps = (int)((MAX_PIX_PER_SEC * SUBPIXEL_SCALE * (float)elapsed) / 1000.0f);
+            if (maxSteps > 0)
+            {
+                int diff = targetSubpix - currentSubpix;
+                if (abs(diff) <= maxSteps)
+                    currentSubpix = targetSubpix;
+                else
+                    currentSubpix += (diff > 0) ? maxSteps : -maxSteps;
+            }
+            showBlue(currentSubpix);
         }
-        showBlue(currentSubpix);
+    }
+    else
+    {
+        if (!maintenanceRendered)
+        {
+            showAllWhite();
+            // TODO: turn bubbler on? Turn bubbler off during visitor mode?
+            maintenanceRendered = true;
+        }
+        // Keep prevFrameMs current so that the slew's elapsed-time
+        // calculation starts fresh when returning to visitor mode,
+        // preventing the dot from teleporting on the first frame.
+        prevFrameMs = now;
     }
 }
