@@ -1,10 +1,13 @@
 /*
  * Museum exhibit – NeoPixel strip controller
  * Controllino Mini (ATmega328P @ 5 V)
+ * 
+ * HUMAN NOTE: ASSUMPTIONS MADE (that should be checked):
+ * - A0 is correctly pulled down (either internally or through the small power supply) for reading
  *
  * Encoder:  CONTROLLINO_IN0 (INT0, pin 2), CONTROLLINO_IN1 (INT1, pin 3)
- * NeoPixel: CONTROLLINO_D6 PIN HEADER only – leave screw terminal unwired
- * Mode:     CONTROLLINO_A1  HIGH = visitor mode, LOW = maintenance mode (all white)
+ * NeoPixel: CONTROLLINO_D6 PIN HEADER only – leave screw terminal unwired // is this true? what does this mean?
+ * Mode:     CONTROLLINO_A0  HIGH = visitor mode, LOW = maintenance mode (all white)
  *
  * Boot sequence:
  *   1. NeoPixel: blue dot sweeps 0→end→0 over 2000 ms
@@ -35,7 +38,8 @@ const uint8_t BG_R = 2, BG_G = 0, BG_B = 0;
 // ── Hardware ─────────────────────────────────────────────────────────────────
 
 #define NEOPIXEL_PIN CONTROLLINO_D6
-#define MODE_PIN     CONTROLLINO_A1  // HIGH = visitor mode, LOW = maintenance mode
+#define MODE_PIN     CONTROLLINO_A0  // HIGH = visitor mode, LOW = maintenance mode
+#define BUBBLER_PIN  CONTROLLINO_D0 // HIGH = on, LOW = off
 
 Encoder knob(CONTROLLINO_IN0, CONTROLLINO_IN1);
 Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -141,7 +145,10 @@ void setup()
     Serial.begin(9600);
     printSketchNameAndCompileDate();
 
-    pinMode(MODE_PIN, INPUT_PULLDOWN);
+    pinMode(MODE_PIN, INPUT);
+    pinMode(BUBBLER_PIN, OUTPUT);
+    
+    digitalWrite(BUBBLER_PIN, LOW);
 
     strip.begin();
     strip.show();
@@ -160,7 +167,11 @@ void loop()
 
     if (visitorEngagementMode)
     {
-        maintenanceRendered = false;
+        if (maintenanceRendered)
+        {
+            digitalWrite(BUBBLER_PIN, LOW);
+            maintenanceRendered = false;
+        }
 
         // Encoder
         long raw = knob.read(); // Encoder reads 0-214, approximately.
@@ -192,12 +203,14 @@ void loop()
         if (!maintenanceRendered)
         {
             showAllWhite();
-            // TODO: turn bubbler on? Turn bubbler off during visitor mode?
+            digitalWrite(BUBBLER_PIN, HIGH);
             maintenanceRendered = true;
         }
         // Keep prevFrameMs current so that the slew's elapsed-time
         // calculation starts fresh when returning to visitor mode,
         // preventing the dot from teleporting on the first frame.
+        // HUMAN NOTE: I don't think this is necessary, honsetly we could have it reset every cycle 
+        // TODO: remove (needs testing)
         prevFrameMs = now;
     }
 }
