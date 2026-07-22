@@ -16,7 +16,7 @@
 
 // ── Configuration ────────────────────────────────────────────────────────────
 
-const int PIXEL_COUNT = 215;
+const int PIXEL_COUNT = 210;
 const int SUBPIXEL_SCALE = 16;
 const float MAX_PIX_PER_SEC = 20.0f;
 const int START_DEADBAND_PIXELS = 20;
@@ -29,7 +29,7 @@ const int SUBPIX_PER_COUNT = SUBPIXEL_SCALE;
 
 // Blue-dot palette
 const uint8_t ACTIVE_R = 0, ACTIVE_G = 0, ACTIVE_B = 255;
-const uint8_t BG_R = 0, BG_G = 3, BG_B = 0;
+const uint8_t BG_R = 2, BG_G = 0, BG_B = 0;
 
 // ── Hardware ─────────────────────────────────────────────────────────────────
 
@@ -80,14 +80,14 @@ void showBlue(int sp)
             bri = rem;                  // zero at rem=0, brightens as dot moves right
         else
         {
-            setPixelBothStrips(i, BG_R, BG_G, BG_B);
+            setPixelBothStrips(i, BG_G, BG_R, BG_B);
             continue;
         }
 
         int inv = SUBPIXEL_SCALE - bri;
         setPixelBothStrips(i,
-                           (ACTIVE_R * bri + BG_R * inv) / SUBPIXEL_SCALE,
                            (ACTIVE_G * bri + BG_G * inv) / SUBPIXEL_SCALE,
+                           (ACTIVE_R * bri + BG_R * inv) / SUBPIXEL_SCALE,
                            (ACTIVE_B * bri + BG_B * inv) / SUBPIXEL_SCALE);
     }
     strip.show();
@@ -157,37 +157,12 @@ void loop()
 
     int step = map(raw - lastEncPos, -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
     targetSubpix += step;
-
-    // if (raw > lastEncPos) {
-    //     targetSubpix += step;
-    // } else if (raw < lastEncPos) {
-    //     targetSubpix -= 1;
-    // } else {
-    //     return;
-    // }
+    targetSubpix = constrain(targetSubpix, ACTIVE_MIN_SUBPIX, ACTIVE_MAX_SUBPIX);
 
     Serial.println("Raw input: " + String(raw) + " | Target subpixel: " + String(targetSubpix));
 
     lastEncPos = raw;
-    // long clamped = constrain(raw, 0L, (long)(PIXEL_COUNT - 1));
-    // if (clamped != raw)
-    //     knob.write(clamped);
-
-    // if (clamped != lastEncPos)
-    // {
-    //     // Serial.print(F("Encoder: "));
-    //     // Serial.println((int)clamped);
-    //     lastEncPos = clamped;
-    // }
-
-
-    // int targetSubpix = map((int)clamped,
-    //                        0,
-    //                        PIXEL_COUNT - 1,
-    //                        ACTIVE_MIN_SUBPIX,
-    //                        ACTIVE_MAX_SUBPIX);
-
-    // Slew
+      // Slew
     unsigned long elapsed = now - prevFrameMs;
     if (elapsed > 0)
     {
