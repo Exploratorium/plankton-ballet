@@ -62,8 +62,7 @@ bool maintenanceRendered = false;
 
 void showAllWhite()
 {
-    for (int i = 0; i < PIXEL_COUNT * 2; i++)
-        strip.setPixelColor(i, strip.Color(255, 255, 255));
+    strip.fill(strip.Color(255, 255, 255), 0, PIXEL_COUNT * 2);
     strip.show();
 }
 
@@ -78,6 +77,8 @@ void showBlue(int sp)
     int px = sp / SUBPIXEL_SCALE;
     int rem = sp % SUBPIXEL_SCALE; // 0..SUBPIXEL_SCALE-1
 
+    strip.fill(strip.Color(BG_G, BG_R, BG_B), 0, PIXEL_COUNT * 2);
+
     for (int i = 0; i < PIXEL_COUNT; i++)
     {
         int bri;
@@ -87,7 +88,7 @@ void showBlue(int sp)
             bri = rem;                  // zero at rem=0, brightens as dot moves right
         else
         {
-            setPixelBothStrips(i, BG_G, BG_R, BG_B);
+            // setPixelBothStrips(i, BG_G, BG_R, BG_B);
             continue;
         }
 
@@ -167,17 +168,19 @@ void loop()
 
     if (visitorEngagementMode)
     {
+        long raw = knob.read(); // Encoder reads 0-214, approximately.
         if (maintenanceRendered)
         {
             digitalWrite(BUBBLER_PIN, LOW);
+            lastEncPos = raw; // Needed to keep the target from seeking because of jumps between the last and current value
             maintenanceRendered = false;
         }
 
         // Encoder
-        long raw = knob.read(); // Encoder reads 0-214, approximately.
 
         int step = map(raw - lastEncPos, -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
         targetSubpix += step;
+        targetSubpix = constrain(targetSubpix, ACTIVE_MIN_SUBPIX, ACTIVE_MAX_SUBPIX);
 
         lastEncPos = raw;
 
