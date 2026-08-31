@@ -19,8 +19,19 @@
 #include <Adafruit_NeoPixel.h>
 
 // ── Configuration ────────────────────────────────────────────────────────────
+// Change these values to tune the exhibit. 
 
-const int PIXEL_COUNT = 210;
+// PIXEL_COUNT: Edit this value if you replace the LED strip. 
+// The two sides of the strip may be misaligned if this value is wrong.
+const int PIXEL_COUNT = 210; 
+
+// MAX_STEP: Edit this value if you want to change the speed of the blue dot
+// on the LED strip.
+const int MAX_STEP = 5;
+
+
+// ── Configuration Constants ────────────────────────────────────────────────────────────
+
 const int SUBPIXEL_SCALE = 16;
 const float MAX_PIX_PER_SEC = 20.0f;
 const int START_DEADBAND_PIXELS = 20;
@@ -49,7 +60,6 @@ Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 const int MAX_SUBPIX = (PIXEL_COUNT - 1) * SUBPIXEL_SCALE;
 const int ACTIVE_MIN_SUBPIX = START_DEADBAND_PIXELS * SUBPIXEL_SCALE;
 const int ACTIVE_MAX_SUBPIX = ((PIXEL_COUNT - 1) - END_DEADBAND_PIXELS) * SUBPIXEL_SCALE;
-const int MAX_STEP = 5;
 const int MAX_DIFF = 7;
 
 int currentSubpix = ACTIVE_MIN_SUBPIX;
@@ -178,7 +188,7 @@ void loop()
 
         // Encoder
 
-        int step = map(raw - lastEncPos, -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
+        int step = map(constrain(raw - lastEncPos, -MAX_DIFF, MAX_DIFF), -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
         targetSubpix += step;
         targetSubpix = constrain(targetSubpix, ACTIVE_MIN_SUBPIX, ACTIVE_MAX_SUBPIX);
 
