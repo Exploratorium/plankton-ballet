@@ -1,24 +1,17 @@
 /*
  * Museum exhibit – NeoPixel strip controller
  * Controllino Mini (ATmega328P @ 5 V)
+ * 
+ * HUMAN NOTE: ASSUMPTIONS MADE (that should be checked):
+ * - A0 is correctly pulled down (either internally or through the small power supply) for reading
  *
- * Encoder:     CONTROLLINO_IN0 (INT0, pin 2), CONTROLLINO_IN1 (INT1, pin 3)
- * NeoPixel:    CONTROLLINO_D6 PIN HEADER only – leave screw terminal unwired
- * Night relay: CONTROLLINO_R0  HIGH 22:00–07:59, LOW during open hours
+ * Encoder:  CONTROLLINO_IN0 (INT0, pin 2), CONTROLLINO_IN1 (INT1, pin 3)
+ * NeoPixel: CONTROLLINO_D6 PIN HEADER only – leave screw terminal unwired // is this true? what does this mean?
+ * Mode:     CONTROLLINO_A0  HIGH = visitor mode, LOW = maintenance mode (all white)
  *
  * Boot sequence:
- *   1. Print current RTC time over Serial
- *   2. Relay: ON→OFF→ON→OFF, 500 ms each
- *   3. NeoPixel: blue dot sweeps 0→end→0 over 2000 ms
- *
- * ── Setting the RTC ─────────────────────────────────────────────────────────
- *   1. Uncomment #define SET_RTC_TO_COMPILE_TIME below
- *   2. Upload  (RTC is set to compile time)
- *   3. Comment it back out, upload again
- * ────────────────────────────────────────────────────────────────────────────
+ *   1. NeoPixel: blue dot sweeps 0→end→0 over 2000 ms
  */
-
-// #define SET_RTC_TO_COMPILE_TIME
 
 #include <SPI.h>
 #include <Controllino.h>
@@ -26,14 +19,23 @@
 #include <Adafruit_NeoPixel.h>
 
 // ── Configuration ────────────────────────────────────────────────────────────
+// Change these values to tune the exhibit. 
 
-const int PIXEL_COUNT = 215;
+// PIXEL_COUNT: Edit this value if you replace the LED strip. 
+// The two sides of the strip may be misaligned if this value is wrong.
+const int PIXEL_COUNT = 210; 
+
+// MAX_STEP: Edit this value if you want to change the speed of the blue dot
+// on the LED strip.
+const int MAX_STEP = 5;
+
+
+// ── Configuration Constants ────────────────────────────────────────────────────────────
+
 const int SUBPIXEL_SCALE = 16;
 const float MAX_PIX_PER_SEC = 20.0f;
 const int START_DEADBAND_PIXELS = 20;
 const int END_DEADBAND_PIXELS = 20;
-
-const String BITBUCKET_URL = "TBD";
 
 // Sub-pixels moved per quadrature count. 16 = 1 pixel per count.
 // If the dot moves too fast, increase this value; too slow, decrease it.
@@ -42,16 +44,13 @@ const int SUBPIX_PER_COUNT = SUBPIXEL_SCALE;
 
 // Blue-dot palette
 const uint8_t ACTIVE_R = 0, ACTIVE_G = 0, ACTIVE_B = 255;
-const uint8_t BG_R = 0, BG_G = 3, BG_B = 0;
-
-// Night window
-const uint8_t NIGHT_ON_HOUR = 22;
-const uint8_t NIGHT_OFF_HOUR = 8;
+const uint8_t BG_R = 2, BG_G = 0, BG_B = 0;
 
 // ── Hardware ─────────────────────────────────────────────────────────────────
 
 #define NEOPIXEL_PIN CONTROLLINO_D6
-#define RELAY_NIGHT CONTROLLINO_D0
+#define MODE_PIN     CONTROLLINO_A0  // HIGH = visitor mode, LOW = maintenance mode
+#define BUBBLER_PIN  CONTROLLINO_D0 // HIGH = on, LOW = off
 
 Encoder knob(CONTROLLINO_IN0, CONTROLLINO_IN1);
 Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -61,50 +60,19 @@ Adafruit_NeoPixel strip(PIXEL_COUNT * 2, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 const int MAX_SUBPIX = (PIXEL_COUNT - 1) * SUBPIXEL_SCALE;
 const int ACTIVE_MIN_SUBPIX = START_DEADBAND_PIXELS * SUBPIXEL_SCALE;
 const int ACTIVE_MAX_SUBPIX = ((PIXEL_COUNT - 1) - END_DEADBAND_PIXELS) * SUBPIXEL_SCALE;
+const int MAX_DIFF = 7;
 
 int currentSubpix = ACTIVE_MIN_SUBPIX;
 long lastEncPos = 0;
-bool isNight = false;
-bool nightRendered = false;
 unsigned long prevFrameMs = 0;
-unsigned long prevRtcCheckMs = 0;
-
-// ── RTC ──────────────────────────────────────────────────────────────────────
-
-void updateNightState()
-{
-    uint8_t h = (uint8_t)Controllino_GetHour();
-    isNight = (h >= NIGHT_ON_HOUR || h < NIGHT_OFF_HOUR);
-}
-
-void printCurrentTime()
-{
-    Serial.print(F("Boot time: "));
-    Serial.print((int)Controllino_GetDay());
-    Serial.print(F("/"));
-    Serial.print((int)Controllino_GetMonth());
-    Serial.print(F("/20"));
-    Serial.print((int)Controllino_GetYear());
-    Serial.print(F("  "));
-    Serial.print((int)Controllino_GetHour());
-    Serial.print(F(":"));
-    int m = Controllino_GetMinute();
-    if (m < 10)
-        Serial.print(F("0"));
-    Serial.print(m);
-    Serial.print(F(":"));
-    int s = Controllino_GetSecond();
-    if (s < 10)
-        Serial.print(F("0"));
-    Serial.println(s);
-}
+int targetSubpix = ACTIVE_MIN_SUBPIX;
+bool maintenanceRendered = false;
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
 void showAllWhite()
 {
-    for (int i = 0; i < PIXEL_COUNT * 2; i++)
-        strip.setPixelColor(i, strip.Color(255, 255, 255));
+    strip.fill(strip.Color(255, 255, 255), 0, PIXEL_COUNT * 2);
     strip.show();
 }
 
@@ -117,46 +85,33 @@ void setPixelBothStrips(int i, uint8_t r, uint8_t g, uint8_t b)
 void showBlue(int sp)
 {
     int px = sp / SUBPIXEL_SCALE;
-    int rem = sp % SUBPIXEL_SCALE;
+    int rem = sp % SUBPIXEL_SCALE; // 0..SUBPIXEL_SCALE-1
+
+    strip.fill(strip.Color(BG_G, BG_R, BG_B), 0, PIXEL_COUNT * 2);
 
     for (int i = 0; i < PIXEL_COUNT; i++)
     {
         int bri;
         if (i == px)
-            bri = SUBPIXEL_SCALE - rem / 2;
+            bri = SUBPIXEL_SCALE - rem; // full at rem=0, fades as dot moves right
         else if (i == px + 1)
-            bri = rem / 2;
-        else if (i == px - 1 && rem < 8)
-            bri = (8 - rem) / 2;
-        else if (i == px + 2 && rem > 8)
-            bri = (rem - 8) / 2;
+            bri = rem;                  // zero at rem=0, brightens as dot moves right
         else
         {
-            setPixelBothStrips(i, BG_R, BG_G, BG_B);
+            // setPixelBothStrips(i, BG_G, BG_R, BG_B);
             continue;
         }
 
         int inv = SUBPIXEL_SCALE - bri;
         setPixelBothStrips(i,
-                           (ACTIVE_R * bri + BG_R * inv) / SUBPIXEL_SCALE,
                            (ACTIVE_G * bri + BG_G * inv) / SUBPIXEL_SCALE,
+                           (ACTIVE_R * bri + BG_R * inv) / SUBPIXEL_SCALE,
                            (ACTIVE_B * bri + BG_B * inv) / SUBPIXEL_SCALE);
     }
     strip.show();
 }
 
 // ── Boot sequence ─────────────────────────────────────────────────────────────
-
-void relayBootSequence()
-{
-    for (int i = 0; i < 2; i++)
-    {
-        digitalWrite(RELAY_NIGHT, HIGH);
-        delay(500);
-        digitalWrite(RELAY_NIGHT, LOW);
-        delay(500);
-    }
-}
 
 void bootDotAnimation()
 {
@@ -193,8 +148,6 @@ void printSketchNameAndCompileDate()
     Serial.print(__DATE__);
     Serial.print(" at ");
     Serial.print(__TIME__);
-    Serial.print(" Bitbucket URL with hash: ");
-    Serial.print(BITBUCKET_URL);
     Serial.print("\n");
 }
 
@@ -202,94 +155,75 @@ void setup()
 {
     Serial.begin(9600);
     printSketchNameAndCompileDate();
-    Controllino_RTC_init();
 
-#ifdef SET_RTC_TO_COMPILE_TIME
-    Controllino_SetTimeDateStrings(__DATE__, __TIME__);
-#endif
-
-    printCurrentTime();
-
-    pinMode(RELAY_NIGHT, OUTPUT);
-    digitalWrite(RELAY_NIGHT, LOW);
+    pinMode(MODE_PIN, INPUT);
+    pinMode(BUBBLER_PIN, OUTPUT);
+    
+    digitalWrite(BUBBLER_PIN, LOW);
 
     strip.begin();
     strip.show();
 
-    relayBootSequence();
     bootDotAnimation();
-
-    updateNightState();
-    digitalWrite(RELAY_NIGHT, isNight ? HIGH : LOW);
-    if (isNight)
-    {
-        showAllWhite();
-        nightRendered = true;
-    }
 
     knob.write(0);
     prevFrameMs = millis();
-    prevRtcCheckMs = millis();
 }
 
 void loop()
 {
     unsigned long now = millis();
 
-    // RTC check once per second
-    if (now - prevRtcCheckMs >= 1000UL)
-    {
-        prevRtcCheckMs = now;
-        updateNightState();
-        digitalWrite(RELAY_NIGHT, isNight ? HIGH : LOW);
-    }
+    bool visitorEngagementMode = (digitalRead(MODE_PIN) == HIGH);
 
-    // Night mode
-    if (isNight)
+    if (visitorEngagementMode)
     {
-        if (!nightRendered)
+        long raw = knob.read(); // Encoder reads 0-214, approximately.
+        if (maintenanceRendered)
+        {
+            digitalWrite(BUBBLER_PIN, LOW);
+            lastEncPos = raw; // Needed to keep the target from seeking because of jumps between the last and current value
+            maintenanceRendered = false;
+        }
+
+        // Encoder
+
+        int step = map(constrain(raw - lastEncPos, -MAX_DIFF, MAX_DIFF), -MAX_DIFF, MAX_DIFF, -MAX_STEP, MAX_STEP);
+        targetSubpix += step;
+        targetSubpix = constrain(targetSubpix, ACTIVE_MIN_SUBPIX, ACTIVE_MAX_SUBPIX);
+
+        lastEncPos = raw;
+
+        // Slew
+        unsigned long elapsed = now - prevFrameMs;
+        if (elapsed > 0)
+        {
+            prevFrameMs = now;
+            int maxSteps = (int)((MAX_PIX_PER_SEC * SUBPIXEL_SCALE * (float)elapsed) / 1000.0f);
+            if (maxSteps > 0)
+            {
+                int diff = targetSubpix - currentSubpix;
+                if (abs(diff) <= maxSteps)
+                    currentSubpix = targetSubpix;
+                else
+                    currentSubpix += (diff > 0) ? maxSteps : -maxSteps;
+            }
+            showBlue(currentSubpix);
+        }
+    }
+    else
+    {
+        if (!maintenanceRendered)
         {
             showAllWhite();
-            nightRendered = true;
+            digitalWrite(BUBBLER_PIN, HIGH);
+            maintenanceRendered = true;
         }
+        // Keep prevFrameMs current so that the slew's elapsed-time
+        // calculation starts fresh when returning to visitor mode,
+        // preventing the dot from teleporting on the first frame.
+        // HUMAN NOTE: I don't think this is necessary, honsetly we could have it reset every cycle 
+        // TODO: remove (needs testing)
         prevFrameMs = now;
-        return;
-    }
-    nightRendered = false;
-
-    // Encoder
-    long raw = knob.read();
-    long clamped = constrain(raw, 0L, (long)(PIXEL_COUNT - 1));
-    if (clamped != raw)
-        knob.write(clamped);
-
-    if (clamped != lastEncPos)
-    {
-        Serial.print(F("Encoder: "));
-        Serial.println((int)clamped);
-        lastEncPos = clamped;
-    }
-
-    int targetSubpix = map((int)clamped,
-                           0,
-                           PIXEL_COUNT - 1,
-                           ACTIVE_MIN_SUBPIX,
-                           ACTIVE_MAX_SUBPIX);
-
-    // Slew
-    unsigned long elapsed = now - prevFrameMs;
-    if (elapsed > 0)
-    {
-        prevFrameMs = now;
-        int maxSteps = (int)((MAX_PIX_PER_SEC * SUBPIXEL_SCALE * (float)elapsed) / 1000.0f);
-        if (maxSteps > 0)
-        {
-            int diff = targetSubpix - currentSubpix;
-            if (abs(diff) <= maxSteps)
-                currentSubpix = targetSubpix;
-            else
-                currentSubpix += (diff > 0) ? maxSteps : -maxSteps;
-        }
-        showBlue(currentSubpix);
     }
 }
