@@ -23,11 +23,11 @@
 
 // PIXEL_COUNT: Edit this value if you replace the LED strip. 
 // The two sides of the strip may be misaligned if this value is wrong.
-const int PIXEL_COUNT = 210; 
+const int PIXEL_COUNT = 206; 
 
 // MAX_STEP: Edit this value if you want to change the speed of the blue dot
 // on the LED strip.
-const int MAX_STEP = 5;
+const int MAX_STEP = 4;
 
 
 // ── Configuration Constants ────────────────────────────────────────────────────────────
