@@ -14,9 +14,9 @@
  */
 
 #include <SPI.h>
-#include <Controllino.h>
-#include <Encoder.h>
-#include <Adafruit_NeoPixel.h>
+#include <Controllino.h> //Version 3.0.10
+#include <Encoder.h> //Version 1.4.4
+#include <Adafruit_NeoPixel.h> // Version 1.15.5
 
 // ── Configuration ────────────────────────────────────────────────────────────
 // Change these values to tune the exhibit. 
